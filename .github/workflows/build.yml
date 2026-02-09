@@ -1,0 +1,50 @@
+
+name: Build and Release
+
+on:
+  push:
+    branches: [ "main", "dev" ]
+  pull_request:
+    branches: [ "main", "dev" ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build - ${{ matrix.platform.name }}
+    runs-on: ${{ matrix.platform.os }}
+    strategy:
+      matrix:
+        platform:
+          - name: Linux
+            os: ubuntu-latest
+            bin: lazy-dispatchr
+            output_name: lazy-dispatchr-linux
+          - name: macOS
+            os: macos-latest
+            bin: lazy-dispatchr
+            output_name: lazy-dispatchr-macos
+          - name: Windows
+            os: windows-latest
+            bin: lazy-dispatchr.exe
+            output_name: lazy-dispatchr-windows.exe
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Build
+      run: cargo build --release --verbose
+
+    - name: Prepare Artifact
+      shell: bash
+      run: |
+        mkdir -p dist
+        cp target/release/${{ matrix.platform.bin }} dist/${{ matrix.platform.output_name }}
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.platform.output_name }}
+        path: dist/${{ matrix.platform.output_name }}
