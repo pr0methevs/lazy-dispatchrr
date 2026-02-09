@@ -232,13 +232,13 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
         frame.render_widget(Paragraph::new(repo_text).style(repo_style), fields[2]);
     }
 
-    // Inputs popup
+    // Inputs popup — uses a scrollable Paragraph instead of per-row Layout
+    // constraints, so that many inputs (even of the same type) never get
+    // their rows collapsed to zero height by the layout solver.
     if state.ui.show_inputs_popup && !state.data.input_fields.is_empty() {
         let area = frame.area();
-        let num_fields = state.data.input_fields.len();
-        // Each field takes 4 lines: name/desc line, type/req/default line, value line, blank spacer
-        let popup_height = (num_fields as u16 * 4) + 4; // +4 for border + header + footer
-        let popup_height = popup_height.min(area.height.saturating_sub(4));
+        // Use most of the screen height so the user can see many fields at once
+        let popup_height = area.height.saturating_sub(6).max(10);
 
         let popup_v = Layout::vertical([
             Constraint::Min(0),
@@ -257,43 +257,39 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
         let popup_area = popup_h[1];
         frame.render_widget(Clear, popup_area);
 
+        let num_fields = state.data.input_fields.len();
+        let title = format!(
+            " Workflow Inputs [{}/{}] (j/k: navigate, Enter: edit, Tab: cycle choice, D: dispatch, S: save replay, Esc: cancel) ",
+            state.ui.input_fields_selected + 1,
+            num_fields,
+        );
         let popup_block = Block::default()
-            .title(" Workflow Inputs (j/k: navigate, Enter: edit, Tab: cycle choice, D: dispatch, S: save replay, Esc: cancel) ")
+            .title(title)
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::LightMagenta));
 
         let inner = popup_block.inner(popup_area);
         frame.render_widget(popup_block, popup_area);
 
-        // Build constraints: 4 lines per field
-        let mut constraints: Vec<Constraint> = Vec::new();
-        for _ in 0..num_fields {
-            constraints.push(Constraint::Length(1)); // name + description
-            constraints.push(Constraint::Length(1)); // type / required / default
-            constraints.push(Constraint::Length(1)); // value input
-            constraints.push(Constraint::Length(1)); // spacer
-        }
-        let rows = Layout::vertical(constraints).split(inner);
-
+        // Build every field's lines into a single Vec<Line> for a scrollable Paragraph
         let cursor = "█";
+        let mut lines: Vec<Line> = Vec::new();
+
         for (i, field) in state.data.input_fields.iter().enumerate() {
             let is_selected = i == state.ui.input_fields_selected;
             let is_editing = is_selected && state.ui.input_fields_editing;
-            let base = i * 4;
 
-            // Row 1: name + description
+            // Line 1: name + description
             let req_marker = if field.required { " *" } else { "" };
-            let name_line = format!("{}{}: {}", field.name, req_marker, field.description);
+            let name_text = format!("{}{}: {}", field.name, req_marker, field.description);
             let name_style = if is_selected {
                 Style::default().fg(Color::LightCyan).add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::White)
             };
-            if base < rows.len() {
-                frame.render_widget(Paragraph::new(name_line).style(name_style), rows[base]);
-            }
+            lines.push(Line::from(Span::styled(name_text, name_style)));
 
-            // Row 2: type / required / default / options
+            // Line 2: type / default / options
             let mut meta_parts = vec![format!("  type: {}", field.input_type)];
             if !field.default_value.is_empty() {
                 meta_parts.push(format!("default: {}", field.default_value));
@@ -301,15 +297,10 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
             if !field.options.is_empty() {
                 meta_parts.push(format!("options: [{}]", field.options.join(", ")));
             }
-            let meta_line = meta_parts.join(" | ");
-            if base + 1 < rows.len() {
-                frame.render_widget(
-                    Paragraph::new(meta_line).style(Style::default().fg(Color::DarkGray)),
-                    rows[base + 1],
-                );
-            }
+            let meta_text = meta_parts.join(" | ");
+            lines.push(Line::from(Span::styled(meta_text, Style::default().fg(Color::DarkGray))));
 
-            // Row 3: value input
+            // Line 3: value
             let val_display = if is_editing {
                 format!("  > {}{}", field.value, cursor)
             } else if is_selected {
@@ -324,10 +315,26 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
             } else {
                 Style::default().fg(Color::Gray)
             };
-            if base + 2 < rows.len() {
-                frame.render_widget(Paragraph::new(val_display).style(val_style), rows[base + 2]);
-            }
+            lines.push(Line::from(Span::styled(val_display, val_style)));
+
+            // Line 4: blank spacer between fields
+            lines.push(Line::from(""));
         }
+
+        // Scroll so the selected field is always visible.
+        // Each field occupies 4 lines (name, meta, value, spacer).
+        let lines_per_field: u16 = 4;
+        let selected_top = state.ui.input_fields_selected as u16 * lines_per_field;
+        let visible_height = inner.height;
+        let scroll_offset = if selected_top + lines_per_field <= visible_height {
+            0
+        } else {
+            // Keep selected field roughly in the top third of the view
+            selected_top.saturating_sub(visible_height / 3)
+        };
+
+        let paragraph = Paragraph::new(lines).scroll((scroll_offset, 0));
+        frame.render_widget(paragraph, inner);
     }
 
     // Replays popup
