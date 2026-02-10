@@ -15,6 +15,8 @@ A beautiful terminal user interface (TUI) for dispatching GitHub Actions workflo
 - ✅ **Confirmation Popup** — Preview the exact `gh` command before execution
 - 📺 **Live Logs** — Watch workflow run logs directly in the terminal
 - 🌐 **Browser Integration** — Open runs in GitHub with a single keypress
+- **Repo Name Scrolling** — Scroll horizontally for long repo names
+- **Scrollable Output** — Scroll output when logs are long
 
 ## Prerequisites
 
@@ -47,6 +49,7 @@ cargo run
 |-----|--------|
 | `j` / `↓` | Move down |
 | `k` / `↑` | Move up |
+| `h` / `l` / `Left` / `Right` | Scroll repo names (Repos panel) |
 | `Enter` | Select / Confirm |
 | `Tab` | Cycle focus panels |
 | `Shift+Tab` | Cycle focus (reverse) |
@@ -79,6 +82,12 @@ cargo run
 | `D` | Dispatch workflow |
 | `S` | Save as replay |
 | `Esc` | Exit editing / Close popup |
+
+### Output Panel
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` / `Up` / `Down` | Scroll output (when Output panel is focused) |
 
 ## Application Flow
 

@@ -4,6 +4,64 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
 };
 
+const REPO_HIGHLIGHT_SYMBOL: &str = ">> ";
+
+fn slice_with_offset(text: &str, offset: usize, width: usize) -> String {
+    if width == 0 {
+        return String::new();
+    }
+
+    text.chars().skip(offset).take(width).collect()
+}
+
+fn clamp_scroll_offset(offset: u16, text_len: usize, visible_width: u16) -> u16 {
+    if visible_width == 0 {
+        return 0;
+    }
+
+    let max_offset = text_len.saturating_sub(visible_width as usize) as u16;
+    offset.min(max_offset)
+}
+
+fn wrapped_line_count(text: &str, width: u16) -> u16 {
+    let width = width as usize;
+    if width == 0 {
+        return 0;
+    }
+
+    text.lines()
+        .map(|line| {
+            let len = line.chars().count();
+            let mut count = (len + width - 1) / width;
+            if count == 0 {
+                count = 1;
+            }
+            count as u16
+        })
+        .sum()
+}
+
+fn wrapped_lines_total<'a, I>(lines: I, width: u16) -> u16
+where
+    I: IntoIterator<Item = &'a str>,
+{
+    if width == 0 {
+        return 0;
+    }
+
+    lines
+        .into_iter()
+        .map(|line| {
+            let len = line.chars().count();
+            let mut count = (len + width as usize - 1) / width as usize;
+            if count == 0 {
+                count = 1;
+            }
+            count as u16
+        })
+        .sum()
+}
+
 pub fn render(frame: &mut Frame, state: &mut AppState) {
     // Top-level vertical layout: title, main, bottom
     let main_layout = Layout::vertical([
@@ -33,12 +91,6 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
     .split(areas[0]);
 
     // 1) Repos list (left-most)
-    let repo_items: Vec<ListItem> = state
-        .ui.filtered_repo_indices
-        .iter()
-        .filter_map(|&i| state.data.repos.get(i))
-        .map(|r| ListItem::new(r.name.clone()))
-        .collect();
     let repos_highlight = if matches!(state.ui.focus, crate::app::Focus::Repo) {
         Style::default().add_modifier(Modifier::BOLD).fg(Color::Blue)
     } else {
@@ -56,9 +108,36 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
     } else {
         "Repos".to_string()
     };
+    let repos_block = Block::default()
+        .title(repos_title)
+        .borders(Borders::ALL)
+        .border_style(repos_border);
+    let repos_inner = repos_block.inner(left_columns[0]);
+    let highlight_width = REPO_HIGHLIGHT_SYMBOL.chars().count() as u16;
+    let visible_width = repos_inner.width.saturating_sub(highlight_width);
+    let selected_repo_len = state
+        .selected_repo_real_index()
+        .and_then(|i| state.data.repos.get(i))
+        .map(|r| r.name.chars().count())
+        .unwrap_or(0);
+    state.ui.repos_hscroll =
+        clamp_scroll_offset(state.ui.repos_hscroll, selected_repo_len, visible_width);
+    let repo_items: Vec<ListItem> = state
+        .ui.filtered_repo_indices
+        .iter()
+        .filter_map(|&i| state.data.repos.get(i))
+        .map(|r| {
+            let visible = slice_with_offset(
+                &r.name,
+                state.ui.repos_hscroll as usize,
+                visible_width as usize,
+            );
+            ListItem::new(visible)
+        })
+        .collect();
     let repos_list = List::new(repo_items)
-        .block(Block::default().title(repos_title).borders(Borders::ALL).border_style(repos_border))
-        .highlight_symbol(">> ")
+        .block(repos_block)
+        .highlight_symbol(REPO_HIGHLIGHT_SYMBOL)
         .highlight_style(repos_highlight);
     frame.render_stateful_widget(repos_list, left_columns[0], &mut state.ui.repos_state);
 
@@ -129,6 +208,14 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
         Style::default().fg(Color::Gray)
     };
 
+    let output_block = Block::default()
+        .title("Output")
+        .borders(Borders::ALL)
+        .border_style(output_border);
+    let output_inner = output_block.inner(areas[1]);
+    let output_visible_height = output_inner.height;
+    let output_visible_width = output_inner.width;
+
     let use_styled = state.ui.output_is_success && !state.ui.dispatch_output_lines.is_empty();
     if use_styled {
         let lines: Vec<Line> = state
@@ -144,9 +231,16 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
                 Line::from(Span::styled(text.clone(), Style::default().fg(fg)))
             })
             .collect();
+        let total_lines = wrapped_lines_total(
+            state.ui.dispatch_output_lines.iter().map(|(text, _)| text.as_str()),
+            output_visible_width,
+        );
+        let max_scroll = total_lines.saturating_sub(output_visible_height);
+        state.ui.output_scroll = state.ui.output_scroll.min(max_scroll);
         let output_paragraph = Paragraph::new(lines)
-            .block(Block::default().title("Output").borders(Borders::ALL).border_style(output_border))
-            .wrap(Wrap { trim: true });
+            .block(output_block.clone())
+            .wrap(Wrap { trim: true })
+            .scroll((state.ui.output_scroll, 0));
         frame.render_widget(output_paragraph, areas[1]);
     } else {
         let output_text = state
@@ -158,15 +252,19 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
         } else {
             Style::default()
         };
+        let total_lines = wrapped_line_count(&output_text, output_visible_width);
+        let max_scroll = total_lines.saturating_sub(output_visible_height);
+        state.ui.output_scroll = state.ui.output_scroll.min(max_scroll);
         let output_paragraph = Paragraph::new(output_text)
             .style(output_style)
-            .block(Block::default().title("Output").borders(Borders::ALL).border_style(output_border))
-            .wrap(Wrap { trim: true });
+            .block(output_block.clone())
+            .wrap(Wrap { trim: true })
+            .scroll((state.ui.output_scroll, 0));
         frame.render_widget(output_paragraph, areas[1]);
     }
 
     // Bottom help bar
-    let help_text = "Tab: focus | j/k: nav | /: search | r: replays | ?: help | q: quit";
+    let help_text = "Tab: focus | j/k: nav | h/l: repo scroll | j/k: output scroll | /: search | r: replays | ?: help | q: quit";
     let help_paragraph = Paragraph::new(help_text).block(Block::default());
     frame.render_widget(help_paragraph, main_layout[2]);
 
@@ -467,7 +565,11 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
             ]),
             Line::from(vec![
                 Span::styled("  j/k  ↑/↓         ", Style::default().fg(Color::LightCyan)),
-                Span::raw("Navigate lists"),
+                Span::raw("Navigate lists / scroll output"),
+            ]),
+            Line::from(vec![
+                Span::styled("  h/l  Left/Right  ", Style::default().fg(Color::LightCyan)),
+                Span::raw("Scroll repo names horizontally"),
             ]),
             Line::from(vec![
                 Span::styled("  Enter             ", Style::default().fg(Color::LightCyan)),
