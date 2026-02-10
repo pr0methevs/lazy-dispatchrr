@@ -77,6 +77,9 @@ pub struct UiState {
     pub filtered_repo_indices: Vec<usize>,
     pub filtered_branch_indices: Vec<usize>,
     pub filtered_workflow_indices: Vec<usize>,
+
+    pub repos_hscroll: u16,
+    pub output_scroll: u16,
 }
 
 #[derive(Debug, Default)]
@@ -164,6 +167,8 @@ impl AppState {
                 filtered_repo_indices,
                 filtered_branch_indices: vec![],
                 filtered_workflow_indices: vec![],
+                repos_hscroll: 0,
+                output_scroll: 0,
             },
         }
     }

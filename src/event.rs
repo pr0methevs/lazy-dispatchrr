@@ -386,6 +386,16 @@ pub fn run(mut terminal: DefaultTerminal, state: &mut AppState) -> Result<()> {
                         // Open replays popup for the selected repo
                         state.open_replays();
                     }
+                    KeyCode::Left | KeyCode::Char('h') => {
+                        if matches!(state.ui.focus, Focus::Repo) {
+                            state.ui.repos_hscroll = state.ui.repos_hscroll.saturating_sub(1);
+                        }
+                    }
+                    KeyCode::Right | KeyCode::Char('l') => {
+                        if matches!(state.ui.focus, Focus::Repo) {
+                            state.ui.repos_hscroll = state.ui.repos_hscroll.saturating_add(1);
+                        }
+                    }
                     KeyCode::Char('j') | KeyCode::Down => {
                         // Move down in the current focused list
                         match state.ui.focus {
@@ -399,7 +409,9 @@ pub fn run(mut terminal: DefaultTerminal, state: &mut AppState) -> Result<()> {
                             Focus::Inputs => {
                                 select_next(&mut state.ui.inputs_state, state.data.inputs.len())
                             }
-                            Focus::Output => {}
+                            Focus::Output => {
+                                state.ui.output_scroll = state.ui.output_scroll.saturating_add(1);
+                            }
                         }
                     }
                     KeyCode::Char('k') | KeyCode::Up => {
@@ -417,7 +429,9 @@ pub fn run(mut terminal: DefaultTerminal, state: &mut AppState) -> Result<()> {
                             Focus::Inputs => {
                                 select_previous(&mut state.ui.inputs_state, state.data.inputs.len())
                             }
-                            Focus::Output => {}
+                            Focus::Output => {
+                                state.ui.output_scroll = state.ui.output_scroll.saturating_sub(1);
+                            }
                         }
                     }
                     KeyCode::Tab => {
