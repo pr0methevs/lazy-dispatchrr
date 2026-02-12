@@ -458,15 +458,24 @@ pub fn run(mut terminal: DefaultTerminal, state: &mut AppState) -> Result<()> {
                         // Handle selection based on current focus
                         match state.ui.focus {
                             Focus::Repo => {
-                                state.load_branches();
+                                if let Err(e) = state.load_branches() {
+                                    state.ui.output = Some(format!("Error loading branches: {}", e));
+                                    state.ui.output_is_error = true;
+                                }
                                 state.ui.focus = Focus::Branches;
                             }
                             Focus::Branches => {
-                                state.load_workflows();
+                                if let Err(e) = state.load_workflows() {
+                                    state.ui.output = Some(format!("Error loading workflows: {}", e));
+                                    state.ui.output_is_error = true;
+                                }
                                 state.ui.focus = Focus::Workflows;
                             }
                             Focus::Workflows => {
-                                state.load_inputs();
+                                if let Err(e) = state.load_inputs() {
+                                    state.ui.output = Some(format!("Error loading inputs: {}", e));
+                                    state.ui.output_is_error = true;
+                                }
                                 state.ui.focus = Focus::Inputs;
                             }
                             Focus::Inputs => {

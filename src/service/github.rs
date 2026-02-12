@@ -83,14 +83,66 @@ impl GitHubService {
         Ok((branches, workflows))
     }
 
-     pub fn fetch_workflow_inputs(&self, repo_name: &str, workflow_filename: &str) -> Result<(Vec<String>, Vec<InputField>), Box<dyn std::error::Error>> {
+    /// Fetch workflow file names for a specific branch via `gh api graphql`.
+    pub fn fetch_branch_workflows(&self, owner: &str, name: &str, branch: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+        let query = "query($owner: String!, $name: String!, $expr: String!) {
+            repository(owner: $owner, name: $name) {
+                object(expression: $expr) {
+                    ... on Tree {
+                        entries {
+                            name
+                        }
+                    }
+                }
+            }
+        }";
+
+        let expression = format!("{}:.github/workflows/", branch);
+
+        let output = std::process::Command::new("gh")
+            .args([
+                "api", "graphql",
+                "-f", &format!("query={}", query),
+                "-F", &format!("owner={}", owner),
+                "-F", &format!("name={}", name),
+                "-F", &format!("expr={}", expression),
+            ])
+            .output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("gh cli error: {}", stderr.trim()).into());
+        }
+
+        let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+        let repository = &json["data"]["repository"];
+
+        let workflows: Vec<String> = repository["object"]["entries"]
+            .as_array()
+            .map(|entries| {
+                entries
+                    .iter()
+                    .filter_map(|e| e["name"].as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        Ok(workflows)
+    }
+
+     pub fn fetch_workflow_inputs(&self, repo_name: &str, workflow_filename: &str, branch: Option<&str>) -> Result<(Vec<String>, Vec<InputField>), Box<dyn std::error::Error>> {
         // Fetch workflow file content via gh api
         let api_path = format!(
             "repos/{}/contents/.github/workflows/{}",
             repo_name, workflow_filename
         );
+        let mut args = vec!["api".to_string(), api_path.clone(), "--jq".to_string(), ".content".to_string()];
+        if let Some(branch_ref) = branch {
+            args.push("-f".to_string());
+            args.push(format!("ref={}", branch_ref));
+        }
         let output = std::process::Command::new("gh")
-            .args(["api", &api_path, "--jq", ".content"])
+            .args(&args)
             .output()?;
 
         if !output.status.success() {

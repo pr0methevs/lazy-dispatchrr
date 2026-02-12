@@ -370,14 +370,45 @@ impl AppState {
     }
 
     pub fn load_workflows(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        // Show the actual loaded workflows in the output
+        // Fetch workflows for the selected branch (not just the default branch)
+        let selected_repo_idx = self.selected_repo_real_index()
+            .ok_or("No repo selected.")?;
+        let repo_name = self.data.repos[selected_repo_idx].name.clone();
+
+        let selected_branch_idx = self.selected_branch_real_index()
+            .ok_or("No branch selected.")?;
+        let selected_branch = self.data.branches[selected_branch_idx].clone();
+
+        let parts: Vec<&str> = repo_name.splitn(2, '/').collect();
+        if parts.len() != 2 {
+            return Err(format!("Invalid repo format: '{}'. Expected 'owner/name'.", repo_name).into());
+        }
+        let (owner, name) = (parts[0], parts[1]);
+
+        self.ui.output = Some(format!("Fetching workflows for branch '{}'...", selected_branch));
+        self.ui.output_is_error = false;
+
+        let workflows = self.github.fetch_branch_workflows(owner, name, &selected_branch)?;
+
+        self.data.workflows = workflows.iter().enumerate()
+            .map(|(i, name): (usize, &String)| Workflow {
+                id: format!("wf-{}", i),
+                name: name.clone(),
+                inputs: vec![],
+            })
+            .collect();
+
+        // Reset workflow selection and search filters
+        self.ui.workflows_state.select(if self.data.workflows.is_empty() { None } else { Some(0) });
+        self.ui.filtered_workflow_indices = (0..self.data.workflows.len()).collect();
+
+        // Show the loaded workflows in the output
         let workflow_names: Vec<String> = self.data.workflows.iter().map(|w| format!("- {}", w.name)).collect();
         let display = if workflow_names.is_empty() {
-            "No workflows found for this branch.".to_string()
+            format!("No workflows found on branch '{}'.", selected_branch)
         } else {
-            format!("Loaded workflows for selected branch:\n\n{}", workflow_names.join("\n"))
+            format!("Loaded {} workflows for branch '{}':\n\n{}", workflow_names.len(), selected_branch, workflow_names.join("\n"))
         };
-        self.ui.workflows_state.select(if self.data.workflows.is_empty() { None } else { Some(0) });
         self.ui.output = Some(display);
         Ok(())
     }
@@ -403,7 +434,11 @@ impl AppState {
         };
         let repo_name = &self.data.repos[selected_repo_idx].name; // "owner/repo"
 
-        let (inputs_list, fields) = self.github.fetch_workflow_inputs(repo_name, workflow_filename)?;
+        // Get the selected branch to fetch the workflow file from that branch
+        let branch_ref = self.selected_branch_real_index()
+            .map(|idx| self.data.branches[idx].clone());
+
+        let (inputs_list, fields) = self.github.fetch_workflow_inputs(repo_name, workflow_filename, branch_ref.as_deref())?;
 
         self.data.inputs = inputs_list;
         self.data.input_fields = fields;
