@@ -6,6 +6,23 @@ A beautiful terminal user interface (TUI) for dispatching GitHub Actions workflo
 ![License](https://img.shields.io/badge/license-GPLv3-blue)
 
 
+## Screenshots
+
+### 1. Repo Selection
+![Repo Selection](docs/01-repo-selection.png)
+
+### 2. Branch Selection
+![Branch Selection](docs/02-branch-selection.png)
+
+### 3. Workflow Selection
+![Workflow Selection](docs/03-workflow-selection.png)
+
+### 4. Workflow Inputs
+![Workflow Inputs](docs/04-workflow-inputs.png)
+
+### 5. Dispatch Confirmation
+![Dispatch Confirmation](docs/05-dispatch-confirmation.png)
+
 ## Features
 
 - 🎯 **Quick Dispatch** — Select repo → branch → workflow → dispatch in seconds
