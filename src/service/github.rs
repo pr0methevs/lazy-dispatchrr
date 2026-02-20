@@ -132,15 +132,18 @@ impl GitHubService {
 
      pub fn fetch_workflow_inputs(&self, repo_name: &str, workflow_filename: &str, branch: Option<&str>) -> Result<(Vec<String>, Vec<InputField>), Box<dyn std::error::Error>> {
         // Fetch workflow file content via gh api
-        let api_path = format!(
-            "repos/{}/contents/.github/workflows/{}",
-            repo_name, workflow_filename
-        );
-        let mut args = vec!["api".to_string(), api_path.clone(), "--jq".to_string(), ".content".to_string()];
-        if let Some(branch_ref) = branch {
-            args.push("-f".to_string());
-            args.push(format!("ref={}", branch_ref));
-        }
+        let api_path = if let Some(branch_ref) = branch {
+            format!(
+                "repos/{}/contents/.github/workflows/{}?ref={}",
+                repo_name, workflow_filename, branch_ref
+            )
+        } else {
+            format!(
+                "repos/{}/contents/.github/workflows/{}",
+                repo_name, workflow_filename
+            )
+        };
+        let args = vec!["api".to_string(), api_path.clone(), "--jq".to_string(), ".content".to_string()];
         let output = std::process::Command::new("gh")
             .args(&args)
             .output()?;
