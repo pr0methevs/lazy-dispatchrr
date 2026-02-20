@@ -203,7 +203,7 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
 
     // Right area: big output panel (75% width)
     let output_border = if matches!(state.ui.focus, crate::app::Focus::Output) {
-        Style::default().fg(Color::Yellow)
+        Style::default().fg(Color::Blue)
     } else {
         Style::default().fg(Color::Gray)
     };

@@ -256,30 +256,56 @@ impl GitHubService {
         Ok((args, preview))
     }
 
-    pub fn get_latest_run_logs(&self, repo_name: &str, workflow_filename: &str) -> Result<(u64, String, String, String), Box<dyn std::error::Error>> {
-         // Get the latest run ID
-        let list_output = std::process::Command::new("gh")
+    /// Find the latest run ID for a workflow, with retry/polling for freshly dispatched runs.
+    pub fn find_latest_run_id(&self, repo_name: &str, workflow_filename: &str) -> Result<u64, Box<dyn std::error::Error>> {
+        // Poll a few times since the run may not appear instantly after dispatch
+        for attempt in 0..5 {
+            if attempt > 0 {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+            }
+
+            let list_output = std::process::Command::new("gh")
+                .args([
+                    "run", "list",
+                    "--repo", repo_name,
+                    "--workflow", workflow_filename,
+                    "--limit", "1",
+                    "--json", "databaseId,status,event",
+                ])
+                .output()?;
+
+            if !list_output.status.success() {
+                continue;
+            }
+
+            let runs: serde_json::Value = serde_json::from_slice(&list_output.stdout)?;
+            if let Some(run_id) = runs[0]["databaseId"].as_u64() {
+                return Ok(run_id);
+            }
+        }
+        Err("Could not find workflow run after dispatch. Try pressing 'l' again in a few seconds.".into())
+    }
+
+    pub fn get_run_logs(&self, repo_name: &str, run_id: u64) -> Result<(String, String, String), Box<dyn std::error::Error>> {
+        // Fetch run status
+        let status_output = std::process::Command::new("gh")
             .args([
-                "run", "list",
+                "run", "view",
+                &run_id.to_string(),
                 "--repo", repo_name,
-                "--workflow", workflow_filename,
-                "--limit", "1",
-                "--json", "databaseId,status,conclusion,headBranch,event",
+                "--json", "status,conclusion",
             ])
             .output()?;
 
-        if !list_output.status.success() {
-            let stderr = String::from_utf8_lossy(&list_output.stderr);
-            return Err(format!("Failed to list runs: {}", stderr.trim()).into());
-        }
-
-        let runs: serde_json::Value = serde_json::from_slice(&list_output.stdout)?;
-        let run_id = runs[0]["databaseId"]
-            .as_u64()
-            .ok_or("No recent workflow run found.")?;
-        
-        let status = runs[0]["status"].as_str().unwrap_or("unknown").to_string();
-        let conclusion = runs[0]["conclusion"].as_str().unwrap_or("pending").to_string();
+        let (status, conclusion) = if status_output.status.success() {
+            let info: serde_json::Value = serde_json::from_slice(&status_output.stdout)?;
+            (
+                info["status"].as_str().unwrap_or("unknown").to_string(),
+                info["conclusion"].as_str().unwrap_or("pending").to_string(),
+            )
+        } else {
+            ("unknown".to_string(), "pending".to_string())
+        };
 
         // Fetch the logs for that run
         let log_output = std::process::Command::new("gh")
@@ -302,6 +328,12 @@ impl GitHubService {
             format!("(logs not yet available: {})", stderr.trim())
         };
 
+        Ok((status, conclusion, logs))
+    }
+
+    pub fn get_latest_run_logs(&self, repo_name: &str, workflow_filename: &str) -> Result<(u64, String, String, String), Box<dyn std::error::Error>> {
+        let run_id = self.find_latest_run_id(repo_name, workflow_filename)?;
+        let (status, conclusion, logs) = self.get_run_logs(repo_name, run_id)?;
         Ok((run_id, status, conclusion, logs))
     }
 

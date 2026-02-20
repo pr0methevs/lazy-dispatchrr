@@ -511,28 +511,64 @@ impl AppState {
 
         self.ui.output = Some("dispatch_success".to_string());
         self.ui.awaiting_log_prompt = true;
+
+        // Poll for the run ID so 'l' and 'v' work immediately
+        let repo_name = self.data.repos[selected_repo_idx].name.clone();
+        let workflow_filename = self.data.workflows[selected_wf_idx].name.clone();
+        match self.github.find_latest_run_id(&repo_name, &workflow_filename) {
+            Ok(run_id) => {
+                self.ui.last_run_id = Some(run_id);
+                let idx = self.ui.dispatch_output_lines.len() - 1;
+                self.ui.dispatch_output_lines.insert(
+                    idx,
+                    (format!("Watch live:  gh run watch {} --repo {}", run_id, repo_name), DispatchOutputColor::Yellow),
+                );
+                self.ui.dispatch_output_lines.insert(
+                    idx + 1,
+                    (format!("View logs:   gh run view --repo {} --log", repo_name), DispatchOutputColor::Yellow),
+                );
+            }
+            Err(_) => {
+                // Not critical — user can still press 'l' to find it later
+            }
+        }
+
         Ok(())
     }
 
-    /// Fetch the latest workflow run logs for the current repo/workflow.
+    /// Fetch workflow run logs. Uses stored last_run_id if available,
+    /// otherwise discovers the latest run for the current workflow.
     pub fn watch_workflow_logs(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let selected_repo_idx = match self.selected_repo_real_index() {
             Some(idx) => idx,
             None => return Err("No repo selected.".into()),
         };
-        let repo_name = &self.data.repos[selected_repo_idx].name;
+        let repo_name = self.data.repos[selected_repo_idx].name.clone();
 
-        let selected_wf_idx = match self.selected_workflow_real_index() {
-            Some(idx) => idx,
-            None => return Err("No workflow selected.".into()),
+        // Use stored run ID if available, otherwise discover it
+        let run_id = if let Some(id) = self.ui.last_run_id {
+            id
+        } else {
+            let selected_wf_idx = match self.selected_workflow_real_index() {
+                Some(idx) => idx,
+                None => return Err("No workflow selected.".into()),
+            };
+            let workflow_filename = &self.data.workflows[selected_wf_idx].name;
+
+            self.ui.output = Some(format!("Finding latest run for '{}'...", workflow_filename));
+            self.ui.output_is_error = false;
+
+            let id = self.github.find_latest_run_id(&repo_name, workflow_filename)?;
+            self.ui.last_run_id = Some(id);
+            id
         };
-        let workflow_filename = &self.data.workflows[selected_wf_idx].name;
 
-        self.ui.output = Some(format!("Fetching latest run for '{}'...", workflow_filename));
+        self.ui.output = Some(format!("Fetching logs for run #{}...", run_id));
         self.ui.output_is_error = false;
+        self.ui.output_is_success = false;
+        self.ui.dispatch_output_lines.clear();
 
-        let (run_id, status, conclusion, logs) = self.github.get_latest_run_logs(repo_name, workflow_filename)?;
-        self.ui.last_run_id = Some(run_id);
+        let (status, conclusion, logs) = self.github.get_run_logs(&repo_name, run_id)?;
 
         self.ui.output = Some(format!(
             "Run #{} | status: {} | conclusion: {}\n{}\n\n{}\n\nPress 'l' to refresh logs, 'v' to open in browser, or any other key to dismiss.",

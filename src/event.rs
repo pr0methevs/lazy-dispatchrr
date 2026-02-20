@@ -79,6 +79,8 @@ pub fn run(mut terminal: DefaultTerminal, state: &mut AppState) -> Result<()> {
                             } else {
                                 state.ui.output_is_error = false;
                             }
+                            state.ui.output_scroll = 0;
+                            state.ui.focus = Focus::Output;
                         }
                         _ => {
                             state.ui.show_confirm_dispatch = false;
@@ -458,6 +460,15 @@ pub fn run(mut terminal: DefaultTerminal, state: &mut AppState) -> Result<()> {
                         // Handle selection based on current focus
                         match state.ui.focus {
                             Focus::Repo => {
+                                // Reset output state when selecting a repo
+                                state.ui.output = None;
+                                state.ui.output_is_error = false;
+                                state.ui.output_is_success = false;
+                                state.ui.output_scroll = 0;
+                                state.ui.dispatch_output_lines.clear();
+                                state.ui.awaiting_log_prompt = false;
+                                state.ui.last_run_id = None;
+
                                 if let Err(e) = state.load_branches() {
                                     state.ui.output = Some(format!("Error loading branches: {}", e));
                                     state.ui.output_is_error = true;
@@ -476,7 +487,8 @@ pub fn run(mut terminal: DefaultTerminal, state: &mut AppState) -> Result<()> {
                                     state.ui.output = Some(format!("Error loading inputs: {}", e));
                                     state.ui.output_is_error = true;
                                 }
-                                state.ui.focus = Focus::Inputs;
+                                state.ui.output_scroll = 0;
+                                state.ui.focus = Focus::Output;
                             }
                             Focus::Inputs => {
                                 // Show dispatch confirmation popup
