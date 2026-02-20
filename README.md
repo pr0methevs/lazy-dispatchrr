@@ -27,7 +27,7 @@ A beautiful terminal user interface (TUI) for dispatching GitHub Actions workflo
 ![Workflow Inputs Confirmation](docs/06-workflow-inputs-confirmation.png)
 
 ### 7. Dispatch Successful
-![Dispatch Successful(docs/07-dispatch-successful.png)
+![Dispatch Successful](docs/07-dispatch-successful.png)
 
 
 ## Features
