@@ -17,11 +17,18 @@ A beautiful terminal user interface (TUI) for dispatching GitHub Actions workflo
 ### 3. Workflow Selection
 ![Workflow Selection](docs/03-workflow-selection.png)
 
-### 4. Workflow Inputs
-![Workflow Inputs](docs/04-workflow-inputs.png)
+### 4. Workflow Inputs Overview
+![Workflow Inputs Overview](docs/04-workflow-selected-inputs-overview.png)
 
-### 5. Dispatch Confirmation
-![Dispatch Confirmation](docs/05-dispatch-confirmation.png)
+### 5. Workflow Inputs Entry
+[Workflow Inputs Entry](docs/04-workflow-inputs-entry.png)
+
+### 6. Dispatch Confirmation
+![Workflow Inputs Confirmation](docs/06-workflow-inputs-confirmation.png)
+
+### 7. Dispatch Successful
+![Dispatch Successful(docs/07-dispatch-successful.png)
+
 
 ## Features
 
