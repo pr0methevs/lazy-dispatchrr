@@ -268,6 +268,25 @@ pub fn render(frame: &mut Frame, state: &mut AppState) {
     let help_paragraph = Paragraph::new(help_text).block(Block::default());
     frame.render_widget(help_paragraph, main_layout[2]);
 
+    // Dim the background when any popup is active
+    let any_popup_active = state.ui.show_add_repo_popup
+        || state.ui.show_inputs_popup
+        || state.ui.show_confirm_dispatch
+        || state.ui.show_help_popup
+        || state.ui.show_replays_popup;
+    if any_popup_active {
+        let area = frame.area();
+        let buf = frame.buffer_mut();
+        for y in area.top()..area.bottom() {
+            for x in area.left()..area.right() {
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_fg(Color::DarkGray);
+                    cell.set_bg(Color::Rgb(20, 20, 20));
+                }
+            }
+        }
+    }
+
     // Add Repo popup
     if state.ui.show_add_repo_popup {
         let area = frame.area();
